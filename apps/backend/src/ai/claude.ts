@@ -62,7 +62,22 @@ const INTENT_TOOL: Anthropic.Tool = {
   },
 };
 
-export class ClaudeClient {
+export interface IAiClient {
+  parseIntent(text: string, todayLocal: string): Promise<ParsedIntent>;
+  answerQuestion(question: string, statsContext: string): Promise<string>;
+}
+
+/** Wired when no ANTHROPIC_API_KEY is set — the bot runs rules-only. */
+export class DisabledAiClient implements IAiClient {
+  async parseIntent(text: string): Promise<ParsedIntent> {
+    return { kind: "unknown", text };
+  }
+  async answerQuestion(): Promise<string> {
+    return "โหมดตอบคำถามยังไม่เปิดใช้งาน 🙏 (เปิดได้โดยใส่ ANTHROPIC_API_KEY ใน .env)";
+  }
+}
+
+export class ClaudeClient implements IAiClient {
   private readonly client: Anthropic;
 
   constructor(

@@ -5,7 +5,7 @@ import type { CategoryService } from "../services/category.service.js";
 import type { StatsService } from "../services/stats.service.js";
 import type { TransactionService } from "../services/transaction.service.js";
 import type { UserService } from "../services/user.service.js";
-import type { ClaudeClient } from "../ai/claude.js";
+import type { IAiClient } from "../ai/claude.js";
 import { AppError } from "../utils/errors.js";
 import { logger } from "../utils/logger.js";
 
@@ -16,7 +16,7 @@ export class IntentDispatcher {
     private readonly txns: TransactionService,
     private readonly categories: CategoryService,
     private readonly stats: StatsService,
-    private readonly ai: ClaudeClient,
+    private readonly ai: IAiClient,
     private readonly msg: IMessageBuilder,
   ) {}
 

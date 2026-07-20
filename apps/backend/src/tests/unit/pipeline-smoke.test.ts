@@ -10,7 +10,7 @@ import type { UserService } from "../../services/user.service.js";
 import { TransactionService, type TxnWithRelations } from "../../services/transaction.service.js";
 import type { CategoryService } from "../../services/category.service.js";
 import type { StatsService } from "../../services/stats.service.js";
-import type { ClaudeClient } from "../../ai/claude.js";
+import type { IAiClient } from "../../ai/claude.js";
 import type { ILineMessenger, LineMessage } from "../../line/client.js";
 
 /**
@@ -65,7 +65,7 @@ function buildPipeline() {
   const stats = {} as StatsService;
   const ai = {
     parseIntent: vi.fn(async (text: string) => ({ kind: "unknown", text })),
-  } as unknown as ClaudeClient;
+  } as unknown as IAiClient;
 
   const line: ILineMessenger = {
     reply: vi.fn(async (_t, messages) => void replies.push(messages)),

@@ -3,7 +3,7 @@ import { createPrisma, type PrismaClient } from "./repositories/prisma.js";
 import { LineMessenger, type ILineMessenger } from "./line/client.js";
 import { CoreMessageBuilder } from "./line/messages/core-builder.js";
 import { ThaiRuleParser } from "./nlp/thai-rule-parser.js";
-import { ClaudeClient } from "./ai/claude.js";
+import { ClaudeClient, DisabledAiClient, type IAiClient } from "./ai/claude.js";
 import { UserService } from "./services/user.service.js";
 import { CategoryService } from "./services/category.service.js";
 import { TransactionService } from "./services/transaction.service.js";
@@ -26,7 +26,9 @@ export function createContainer(): Container {
   const line = new LineMessenger(env.LINE_CHANNEL_ACCESS_TOKEN);
   const msg = new CoreMessageBuilder();
   const parser = new ThaiRuleParser();
-  const ai = new ClaudeClient(env.ANTHROPIC_API_KEY, env.AI_PARSE_MODEL, env.AI_CLASSIFY_MODEL);
+  const ai: IAiClient = env.ANTHROPIC_API_KEY
+    ? new ClaudeClient(env.ANTHROPIC_API_KEY, env.AI_PARSE_MODEL, env.AI_CLASSIFY_MODEL)
+    : new DisabledAiClient();
 
   const users = new UserService(prisma, line);
   const categories = new CategoryService(prisma);

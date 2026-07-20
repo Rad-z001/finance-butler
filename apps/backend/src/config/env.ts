@@ -29,7 +29,12 @@ const schema = z.object({
   LINE_LOGIN_CHANNEL_SECRET: z.string().optional(),
   LINE_LOGIN_CALLBACK_URL: z.string().url().optional(),
 
-  ANTHROPIC_API_KEY: z.string().min(1),
+  // optional: without it the bot runs rules-only (no AI fallback / Q&A).
+  // Placeholder values from .env templates count as unset.
+  ANTHROPIC_API_KEY: z
+    .string()
+    .optional()
+    .transform((v) => (v && v.length > 0 && !v.startsWith("PASTE_") ? v : undefined)),
   AI_PARSE_MODEL: z.string().default("claude-sonnet-5"),
   AI_CLASSIFY_MODEL: z.string().default("claude-haiku-4-5-20251001"),
 

@@ -7,7 +7,7 @@ import type { ILineMessenger } from "../line/client.js";
 import type { IMessageBuilder } from "../entities/ports/message-builder.js";
 import type { UserService } from "../services/user.service.js";
 import type { ThaiRuleParser } from "../nlp/thai-rule-parser.js";
-import type { ClaudeClient } from "../ai/claude.js";
+import type { IAiClient } from "../ai/claude.js";
 import type { IntentDispatcher } from "./intent-dispatcher.js";
 import { logger } from "../utils/logger.js";
 
@@ -23,7 +23,7 @@ export class EventPipeline {
     private readonly prisma: PrismaClient,
     private readonly users: UserService,
     private readonly parser: ThaiRuleParser,
-    private readonly ai: ClaudeClient,
+    private readonly ai: IAiClient,
     private readonly dispatcher: IntentDispatcher,
     private readonly line: ILineMessenger,
     private readonly msg: IMessageBuilder,
