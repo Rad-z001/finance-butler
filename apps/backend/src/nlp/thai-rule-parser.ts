@@ -58,6 +58,20 @@ export class ThaiRuleParser {
       return { kind: "search", query: { text: phrase } };
     }
 
+    // ล้างรายการวันนี้ / เคลียร์รายการเมื่อวาน → bulk delete of a period (confirmed)
+    const clear = text.match(/^(?:ล้าง|เคลียร์)\s*รายการ\s*(.*)$/u);
+    if (clear) {
+      const phrase = (clear[1] ?? "").trim() || "วันนี้";
+      const p = resolvePeriod(phrase, tz, nowUtc);
+      if (p) {
+        const range = this.periodRange(p.period, p.anchor, tz);
+        return { kind: "clear", from: range.from, to: range.to, label: phrase };
+      }
+      const d = resolveDate(phrase, tz, nowUtc);
+      if (d) return { kind: "clear", from: d.date, to: d.date, label: phrase };
+      return null;
+    }
+
     // ลบรายการล่าสุด / ลบ #52 / ลบล่าสุด
     const del = text.match(/^ลบ\s*(รายการ)?\s*(ล่าสุด|#?\s*(\d+))?\s*$/u);
     if (del && (del[2] || del[1])) {

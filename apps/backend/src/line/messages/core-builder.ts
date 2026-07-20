@@ -378,6 +378,19 @@ export class CoreMessageBuilder implements IMessageBuilder {
     ];
   }
 
+  clearConfirm(count: number, total: string, label: string, from: string, to: string): LineMessage[] {
+    return [
+      text(`⚠️ ล้างรายการ${label}ทั้งหมด ${count} รายการ (รวม ${total}฿)?\nลบแล้วกู้คืนได้ทีละรายการด้วย "กู้คืนล่าสุด"`, [
+        pb("✅ ยืนยันล้าง", `a=clear&f=${from}&t=${to}`),
+        pb("ยกเลิก", "a=delc"),
+      ]),
+    ];
+  }
+
+  cleared(count: number, total: string): LineMessage[] {
+    return [text(`🗑 ล้างแล้ว ${count} รายการ (รวม ${total}฿)`)];
+  }
+
   deleted(txn: TxnView): LineMessage[] {
     return [text(`🗑 ลบ #${txn.shortRef} แล้ว (พิมพ์ "กู้คืน #${txn.shortRef}" เพื่อเรียกคืน)`)];
   }

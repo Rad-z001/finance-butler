@@ -12,6 +12,7 @@ export type ParsedIntent =
   | SearchIntent
   | EditIntent
   | DeleteIntent
+  | ClearIntent
   | RestoreIntent
   | StatsIntent
   | SetBudgetIntent
@@ -84,6 +85,16 @@ export interface EditIntent {
 export interface DeleteIntent {
   kind: "delete";
   ref: TxnRef;
+}
+
+/** Bulk delete of a whole period ("ล้างรายการวันนี้") — always confirmed first. */
+export interface ClearIntent {
+  kind: "clear";
+  /** local YYYY-MM-DD range, inclusive */
+  from: string;
+  to: string;
+  /** human label of the period for the confirmation message */
+  label: string;
 }
 
 export interface RestoreIntent {

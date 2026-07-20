@@ -200,6 +200,25 @@ describe("commands", () => {
     });
   });
 
+  it("ล้างรายการวันนี้ / ล้างรายการเมื่อวาน → clear with confirmation range", () => {
+    expect(parser.parse("ล้างรายการวันนี้", TZ, NOW)).toMatchObject({
+      kind: "clear",
+      from: "2026-07-20",
+      to: "2026-07-20",
+    });
+    expect(parser.parse("ล้างรายการเมื่อวาน", TZ, NOW)).toMatchObject({
+      kind: "clear",
+      from: "2026-07-19",
+      to: "2026-07-19",
+    });
+    expect(parser.parse("ล้างรายการ", TZ, NOW)).toMatchObject({ kind: "clear", from: "2026-07-20" });
+    expect(parser.parse("เคลียร์รายการเดือนนี้", TZ, NOW)).toMatchObject({
+      kind: "clear",
+      from: "2026-07-01",
+      to: "2026-07-31",
+    });
+  });
+
   it("กู้คืน #52 → restore", () => {
     expect(parser.parse("กู้คืน #52", TZ, NOW)).toMatchObject({
       kind: "restore",

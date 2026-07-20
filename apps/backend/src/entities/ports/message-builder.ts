@@ -26,6 +26,8 @@ export interface IMessageBuilder {
   txnList(items: TxnView[], totalAmount: string, title: string): LineMessage[];
   statsSummary(stats: StatsView): LineMessage[];
   deleteConfirm(txn: TxnView): LineMessage[];
+  clearConfirm(count: number, total: string, label: string, from: string, to: string): LineMessage[];
+  cleared(count: number, total: string): LineMessage[];
   deleted(txn: TxnView): LineMessage[];
   restored(txn: TxnView): LineMessage[];
   edited(txn: TxnView): LineMessage[];

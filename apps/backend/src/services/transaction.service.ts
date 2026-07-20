@@ -193,6 +193,75 @@ export class TransactionService {
     });
   }
 
+  /** Preview for the clear confirmation: how many active txns in the range, summed. */
+  async sumInRange(
+    userId: string,
+    fromLocal: string,
+    toLocal: string,
+    tz: string,
+  ): Promise<{ count: number; total: Prisma.Decimal }> {
+    const where: Prisma.TransactionWhereInput = {
+      userId,
+      deletedAt: null,
+      occurredAt: {
+        gte: dayjs.tz(fromLocal, tz).startOf("day").toDate(),
+        lte: dayjs.tz(toLocal, tz).endOf("day").toDate(),
+      },
+    };
+    const [count, agg] = await Promise.all([
+      this.prisma.transaction.count({ where }),
+      this.prisma.transaction.aggregate({ where, _sum: { amount: true } }),
+    ]);
+    return { count, total: agg._sum.amount ?? new Prisma.Decimal(0) };
+  }
+
+  /** Bulk soft delete of a whole period; balances reversed per account, atomic. */
+  async softDeleteRange(
+    userId: string,
+    fromLocal: string,
+    toLocal: string,
+    tz: string,
+  ): Promise<{ count: number; total: Prisma.Decimal }> {
+    return this.prisma.$transaction(async (tx) => {
+      const txns = await tx.transaction.findMany({
+        where: {
+          userId,
+          deletedAt: null,
+          occurredAt: {
+            gte: dayjs.tz(fromLocal, tz).startOf("day").toDate(),
+            lte: dayjs.tz(toLocal, tz).endOf("day").toDate(),
+          },
+        },
+      });
+      const zero = new Prisma.Decimal(0);
+      if (txns.length === 0) return { count: 0, total: zero };
+
+      const perAccount = new Map<string, Prisma.Decimal>();
+      for (const t of txns) {
+        const eff = balanceEffect(t.type, t.amount);
+        perAccount.set(t.accountId, (perAccount.get(t.accountId) ?? zero).plus(eff));
+      }
+      for (const [accountId, eff] of perAccount) {
+        await tx.account.update({ where: { id: accountId }, data: { balance: { decrement: eff } } });
+      }
+      await tx.transaction.updateMany({
+        where: { id: { in: txns.map((t) => t.id) } },
+        data: { deletedAt: new Date() },
+      });
+      const total = txns.reduce((s, t) => s.plus(t.amount), zero);
+      await tx.auditLog.create({
+        data: {
+          userId,
+          action: "transaction.clear_range",
+          entity: "Transaction",
+          entityId: `${fromLocal}..${toLocal}`,
+          after: { count: txns.length, total: total.toString() },
+        },
+      });
+      return { count: txns.length, total };
+    });
+  }
+
   async restore(userId: string, ref: TxnRef): Promise<TxnWithRelations> {
     const txn = await this.prisma.transaction.findFirst({
       where: {

@@ -7,6 +7,7 @@ import type { TransactionService } from "../services/transaction.service.js";
 import type { UserService } from "../services/user.service.js";
 import type { IAiClient } from "../ai/claude.js";
 import { AppError } from "../utils/errors.js";
+import { formatAmount } from "../utils/money.js";
 import { logger } from "../utils/logger.js";
 
 export interface DispatchCtx {
@@ -140,6 +141,25 @@ export class IntentDispatcher {
           return this.msg.deleteConfirm(this.txns.toView(txn, user.timezone));
         }
 
+        case "clear": {
+          const { count, total } = await this.txns.sumInRange(
+            user.id,
+            intent.from,
+            intent.to,
+            user.timezone,
+          );
+          if (count === 0) {
+            return [{ type: "text", text: `ไม่มีรายการ${intent.label}ให้ล้าง 👌` }];
+          }
+          return this.msg.clearConfirm(
+            count,
+            formatAmount(total),
+            intent.label,
+            intent.from,
+            intent.to,
+          );
+        }
+
         case "restore": {
           const txn = await this.txns.restore(user.id, intent.ref);
           return this.msg.restored(this.txns.toView(txn, user.timezone));
@@ -191,6 +211,18 @@ export class IntentDispatcher {
         }
         case "delc":
           return [{ type: "text", text: "ยกเลิกแล้ว 👌" }];
+        case "clear": {
+          const from = p.get("f");
+          const to = p.get("t");
+          if (!from || !to) return this.msg.error("not_found");
+          const { count, total } = await this.txns.softDeleteRange(
+            user.id,
+            from,
+            to,
+            user.timezone,
+          );
+          return this.msg.cleared(count, formatAmount(total));
+        }
         case "stats": {
           const period = p.get("p");
           const date = p.get("d");
