@@ -11,3 +11,4 @@ coverage/
 apps/backend/prisma/migrations/**/README.md
 minio-data/
 pg-data/
+.devtools/

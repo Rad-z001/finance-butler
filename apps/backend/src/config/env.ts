@@ -1,4 +1,12 @@
 import { z } from "zod";
+import { fileURLToPath } from "node:url";
+
+// Load apps/backend/.env in dev (real env vars win in prod/CI; no file there is fine)
+try {
+  process.loadEnvFile(fileURLToPath(new URL("../../.env", import.meta.url)));
+} catch {
+  /* no .env file — rely on process env */
+}
 
 /**
  * Zod-validated environment. Import `env` anywhere — the process refuses to boot
