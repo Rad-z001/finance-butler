@@ -36,13 +36,16 @@ export function scaleDecimal(numStr: string, zeros: number): string {
   return fracPart ? `${intPart}.${fracPart}` : intPart;
 }
 
+/** Numbers followed by a counter/unit word are quantities, not baht ("ซื้อ 2 ชิ้น"). */
+const COUNTER_AFTER_RE =
+  /^\s*(ชิ้น|อัน|แก้ว|จาน|ขวด|กล่อง|ตัว|ครั้ง|คน|ที่นั่ง|โล|กิโล|กรัม|ลิตร|ลูก|ใบ|เม็ด|ซอง|แพ็ค|%)/u;
+
 /**
- * Returns the LAST plausible amount in the text (Thai phrasing puts the amount
- * at the end: "กินข้าว 80"). Callers must strip date phrases first so "15 ก.ค."
- * doesn't read as 15 baht.
+ * All plausible amounts in the text, in order. Callers must strip date phrases
+ * first so "15 ก.ค." doesn't read as 15 baht.
  */
-export function extractAmount(text: string): AmountMatch | null {
-  let best: AmountMatch | null = null;
+export function extractAllAmounts(text: string): AmountMatch[] {
+  const out: AmountMatch[] = [];
   for (const m of text.matchAll(AMOUNT_RE)) {
     const [full, intPart, fracPart = "", mult, unit] = m;
     if (!intPart) continue;
@@ -50,16 +53,26 @@ export function extractAmount(text: string): AmountMatch | null {
     const prev = m.index > 0 ? text[m.index - 1] : " ";
     if (prev && /[A-Za-z0-9#]/.test(prev)) continue;
 
+    // trim the trailing unit-less whitespace the regex may have swallowed
+    const matchedText = unit || mult ? full.trimEnd() : intPart + fracPart;
+
+    // quantity, not money: "2 ชิ้น" (unless an explicit baht unit was present)
+    if (!unit && COUNTER_AFTER_RE.test(text.slice(m.index + matchedText.length))) continue;
+
     let amount = intPart.replace(/,/g, "") + fracPart;
     if (mult) amount = scaleDecimal(amount, MULTIPLIERS[mult] ?? 0);
+    if (/^0+(\.0*)?$/.test(amount)) continue; // zero is never a real amount
 
-    // a lone small number with no unit and no context is still fine — but skip
-    // zero, which is never a real amount
-    if (/^0+(\.0*)?$/.test(amount)) continue;
-
-    // trim the trailing unit-less whitespace the regex may have swallowed
-    const matchedText = unit || mult ? full.trimEnd() : (intPart + fracPart);
-    best = { amount, matchedText, index: m.index };
+    out.push({ amount, matchedText, index: m.index });
   }
-  return best;
+  return out;
+}
+
+/**
+ * The LAST plausible amount (Thai phrasing puts the amount at the end:
+ * "กินข้าว 80").
+ */
+export function extractAmount(text: string): AmountMatch | null {
+  const all = extractAllAmounts(text);
+  return all.length > 0 ? (all[all.length - 1] ?? null) : null;
 }

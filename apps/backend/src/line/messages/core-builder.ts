@@ -108,6 +108,26 @@ export class CoreMessageBuilder implements IMessageBuilder {
     return [m];
   }
 
+  txnBatchSaved(txns: TxnView[], accountBalance: string): LineMessage[] {
+    const rows = txns.map((t) =>
+      kv(
+        `#${t.shortRef} ${t.categoryIcon} ${t.description || t.categoryName}`.slice(0, 40),
+        `${t.type === "INCOME" ? "+" : "−"}${t.amount}฿`,
+        t.type === "INCOME" ? GREEN : RED,
+      ),
+    );
+    rows.push({ type: "separator", margin: "sm" } as messagingApi.FlexComponent);
+    if (txns[0]?.actorName) rows.push(kv("จ่ายโดย", `👤 ${txns[0].actorName}`));
+    rows.push(kv("ยอดคงเหลือ", `${accountBalance}฿`));
+    const m = bubble(
+      `บันทึกแล้ว ${txns.length} รายการ`,
+      `✅ บันทึกแล้ว ${txns.length} รายการ`,
+      rows,
+    ) as messagingApi.FlexMessage;
+    m.quickReply = { items: [msg("สรุปวันนี้"), pb("ลบรายการล่าสุด", "a=delask_last")] };
+    return [m];
+  }
+
   txnList(items: TxnView[], totalAmount: string, title: string): LineMessage[] {
     if (items.length === 0) return [text(`ไม่พบรายการ${title ? ` (${title})` : ""} 🔍`)];
     const rows = items.map((t) =>

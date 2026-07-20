@@ -54,6 +54,37 @@ export class IntentDispatcher {
           return this.msg.txnSaved(this.txns.toView(txn, user.timezone), balance.toString());
         }
 
+        case "add_transactions": {
+          const account = await this.users.defaultAccount(user.id);
+          const views = [];
+          let balance = "";
+          for (const item of intent.items) {
+            const category = await this.categories.resolveForTransaction(
+              user.id,
+              item.description,
+              item.merchant,
+              item.categoryHint,
+            );
+            const { txn, balance: b } = await this.txns.create({
+              userId: user.id,
+              accountId: account.id,
+              categoryId: category.id,
+              type: item.type,
+              amount: item.amount,
+              description: item.description,
+              ...(item.merchant ? { merchant: item.merchant } : {}),
+              ...(ctx.actorName ? { actorName: ctx.actorName } : {}),
+              ...(ctx.actorLineUserId ? { actorLineUserId: ctx.actorLineUserId } : {}),
+              occurredAtLocal: intent.occurredAt,
+              tz: user.timezone,
+              source: "NLP",
+            });
+            views.push(this.txns.toView(txn, user.timezone));
+            balance = b.toString();
+          }
+          return this.msg.txnBatchSaved(views, balance);
+        }
+
         case "stats": {
           const s = await this.stats.summary(user.id, intent.period, user.timezone, intent.date);
           return this.msg.statsSummary(s);
@@ -152,6 +183,10 @@ export class IntentDispatcher {
         case "delask": {
           if (!id) return this.msg.error("not_found");
           const txn = await this.txns.findById(user.id, id);
+          return this.msg.deleteConfirm(this.txns.toView(txn, user.timezone));
+        }
+        case "delask_last": {
+          const txn = await this.txns.findByRef(user.id, { by: "last" });
           return this.msg.deleteConfirm(this.txns.toView(txn, user.timezone));
         }
         case "delc":

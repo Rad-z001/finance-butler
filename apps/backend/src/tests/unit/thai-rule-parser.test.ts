@@ -76,6 +76,48 @@ describe("spec examples → add_transaction", () => {
   });
 });
 
+describe("multiple items in one message", () => {
+  it("ข้าวเช้า 25 นํ้าเปล่า 7 (decomposed สระอำ, as typed on some phones)", () => {
+    const t = parser.parse("ข้าวเช้า 25 นํ้าเปล่า 7", TZ, NOW);
+    expect(t.kind).toBe("add_transactions");
+    if (t.kind !== "add_transactions") return;
+    expect(t.items).toHaveLength(2);
+    expect(t.items[0]).toMatchObject({ amount: "25", description: "ข้าวเช้า", categoryHint: "food" });
+    expect(t.items[1]).toMatchObject({ amount: "7", description: "น้ำเปล่า", categoryHint: "food" });
+    expect(t.occurredAt).toBe("2026-07-20");
+  });
+
+  it("three items with mixed categories", () => {
+    const t = parser.parse("กาแฟ 45 ขนม 20 ค่าวินมอไซค์ 15", TZ, NOW);
+    expect(t.kind).toBe("add_transactions");
+    if (t.kind !== "add_transactions") return;
+    expect(t.items.map((i) => i.amount)).toEqual(["45", "20", "15"]);
+    expect(t.items[2]?.categoryHint).toBe("transport");
+  });
+
+  it("date word applies to every item", () => {
+    const t = parser.parse("เมื่อวาน ข้าวเที่ยง 60 ชาไข่มุก 35", TZ, NOW);
+    expect(t.kind).toBe("add_transactions");
+    if (t.kind !== "add_transactions") return;
+    expect(t.occurredAt).toBe("2026-07-19");
+  });
+
+  it("newlines work as separators too", () => {
+    const t = parser.parse("ข้าวเช้า 25\nน้ำเปล่า 7", TZ, NOW);
+    expect(t.kind).toBe("add_transactions");
+  });
+
+  it("quantity numbers are not amounts: ซื้อ 2 ชิ้น 150 stays a single txn", () => {
+    const t = parser.parse("ซื้อ 2 ชิ้น 150", TZ, NOW);
+    expect(t.kind).toBe("add_transaction");
+    if (t.kind === "add_transaction") expect(t.amount).toBe("150");
+  });
+
+  it("single item still parses as add_transaction", () => {
+    expect(parser.parse("กินข้าว 80", TZ, NOW).kind).toBe("add_transaction");
+  });
+});
+
 describe("commands", () => {
   it("สรุปวันนี้ / เดือนนี้ → stats", () => {
     expect(parser.parse("สรุปวันนี้", TZ, NOW)).toMatchObject({ kind: "stats", period: "day" });

@@ -8,6 +8,7 @@ import type { BudgetPeriod, TransactionType } from "../constants/index.js";
  */
 export type ParsedIntent =
   | AddTransactionIntent
+  | AddTransactionsIntent
   | SearchIntent
   | EditIntent
   | DeleteIntent
@@ -32,6 +33,24 @@ export interface AddTransactionIntent {
   occurredAt: string;
   /** which layer produced this parse — for metrics & debugging */
   parsedBy: "correction" | "rules" | "ai";
+  confidence: number;
+}
+
+export interface TxnItem {
+  type: TransactionType;
+  amount: string;
+  description: string;
+  merchant?: string;
+  categoryHint?: string;
+}
+
+/** Several items typed in one message: "ข้าวเช้า 25 น้ำเปล่า 7". */
+export interface AddTransactionsIntent {
+  kind: "add_transactions";
+  items: TxnItem[];
+  /** ISO date shared by every item (date words apply to the whole message) */
+  occurredAt: string;
+  parsedBy: "rules" | "ai";
   confidence: number;
 }
 

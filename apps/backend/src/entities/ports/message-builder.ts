@@ -22,6 +22,7 @@ export interface IMessageBuilder {
   welcome(displayName: string): LineMessage[];
   welcomeGroup(groupName: string): LineMessage[];
   txnSaved(txn: TxnView, accountBalance: string): LineMessage[];
+  txnBatchSaved(txns: TxnView[], accountBalance: string): LineMessage[];
   txnList(items: TxnView[], totalAmount: string, title: string): LineMessage[];
   statsSummary(stats: StatsView): LineMessage[];
   deleteConfirm(txn: TxnView): LineMessage[];

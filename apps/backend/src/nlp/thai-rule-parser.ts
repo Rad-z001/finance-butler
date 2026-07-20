@@ -1,5 +1,5 @@
-import type { ParsedIntent, TxnRef } from "@finance-butler/shared";
-import { extractAmount } from "./amount.js";
+import type { ParsedIntent, TxnItem, TxnRef } from "@finance-butler/shared";
+import { extractAllAmounts, extractAmount, type AmountMatch } from "./amount.js";
 import { resolveDate, resolvePeriod } from "./date-resolver.js";
 import { suggestCategoryKey, suggestType } from "./category-keywords.js";
 import dayjs from "dayjs";
@@ -15,9 +15,20 @@ dayjs.extend(timezone);
  * resolved here, free and in microseconds. Returns kind:"unknown" when unsure;
  * NEVER guesses an amount it isn't certain about.
  */
+/**
+ * Mobile keyboards sometimes type สระอำ decomposed (นิคหิต ◌ํ + า renders like ำ):
+ * "นํ้า" ≠ "น้ำ" byte-wise. Fold both (with or without a tone mark in between)
+ * to the composed form so keyword matching works.
+ */
+function normalizeThai(text: string): string {
+  return text
+    .replace(/ํ([่-๋])า/gu, "$1ำ")
+    .replace(/ํา/gu, "ำ");
+}
+
 export class ThaiRuleParser {
   parse(rawText: string, tz: string, nowUtc?: Date): ParsedIntent {
-    const text = rawText.trim().replace(/\s+/gu, " ");
+    const text = normalizeThai(rawText).trim().replace(/\s+/gu, " ");
     if (!text) return { kind: "unknown", text: rawText };
 
     return (
@@ -120,9 +131,20 @@ export class ThaiRuleParser {
   private parseTransaction(text: string, tz: string, nowUtc?: Date): ParsedIntent | null {
     // strip date phrase FIRST so "15 ก.ค. ค่าไฟ 900" doesn't read 15 as baht
     const dateMatch = resolveDate(text, tz, nowUtc);
-    let rest = dateMatch ? text.replace(dateMatch.matchedText, " ") : text;
+    const rest = dateMatch ? text.replace(dateMatch.matchedText, " ") : text;
+    const today = (nowUtc ? dayjs(nowUtc).tz(tz) : dayjs().tz(tz)).format("YYYY-MM-DD");
+    const occurredAt = dateMatch?.date ?? today;
 
-    const amt = extractAmount(rest);
+    // several "desc amount" pairs in one message: "ข้าวเช้า 25 น้ำเปล่า 7"
+    const amounts = extractAllAmounts(rest);
+    if (amounts.length >= 2) {
+      const items = this.splitItems(rest, amounts);
+      if (items) {
+        return { kind: "add_transactions", items, occurredAt, parsedBy: "rules", confidence: 0.85 };
+      }
+    }
+
+    const amt = amounts.length > 0 ? (amounts[amounts.length - 1] ?? null) : null;
     if (!amt) return null;
 
     const description = (rest.slice(0, amt.index) + rest.slice(amt.index + amt.matchedText.length))
@@ -134,7 +156,6 @@ export class ThaiRuleParser {
     const categoryHint = suggestCategoryKey(description);
     const merchant = description.match(/[A-Za-z][A-Za-z0-9&._'-]+(?:\s+[A-Za-z][A-Za-z0-9&._'-]+)?/u)?.[0];
 
-    const today = (nowUtc ? dayjs(nowUtc).tz(tz) : dayjs().tz(tz)).format("YYYY-MM-DD");
     return {
       kind: "add_transaction",
       type,
@@ -142,10 +163,39 @@ export class ThaiRuleParser {
       description,
       ...(merchant ? { merchant } : {}),
       ...(categoryHint ? { categoryHint } : {}),
-      occurredAt: dateMatch?.date ?? today,
+      occurredAt,
       parsedBy: "rules",
       confidence: categoryHint ? 0.9 : 0.7,
     };
+  }
+
+  /**
+   * Slice "ข้าวเช้า 25 น้ำเปล่า 7" into per-item segments, each ending at an
+   * amount. Returns null (→ single-item fallback) unless EVERY amount has a
+   * non-empty description before it — that's the signal it's really a list.
+   */
+  private splitItems(text: string, amounts: AmountMatch[]): TxnItem[] | null {
+    const items: TxnItem[] = [];
+    let cursor = 0;
+    for (const amt of amounts) {
+      const description = text
+        .slice(cursor, amt.index)
+        .replace(/^[\s,、;/]+|^(และ|กับ|แล้วก็)\s*/u, "")
+        .replace(/\s+/gu, " ")
+        .trim();
+      if (!description) return null;
+      const merchant = description.match(/[A-Za-z][A-Za-z0-9&._'-]+(?:\s+[A-Za-z][A-Za-z0-9&._'-]+)?/u)?.[0];
+      const categoryHint = suggestCategoryKey(description);
+      items.push({
+        type: suggestType(description),
+        amount: amt.amount,
+        description,
+        ...(merchant ? { merchant } : {}),
+        ...(categoryHint ? { categoryHint } : {}),
+      });
+      cursor = amt.index + amt.matchedText.length;
+    }
+    return items;
   }
 
   // ── search: "กาแฟเดือนนี้", "ค่าอาหารปีนี้", "ค้นหาร้าน Amazon" ──────────
