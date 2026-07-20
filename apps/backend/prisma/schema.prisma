@@ -1,0 +1,577 @@
+// Finance Butler AI — database schema (owned by TASK-01; see docs/02-DATABASE.md)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────── Enums ───────────────────────────
+
+enum AccountType {
+  CASH
+  BANK
+  CREDIT_CARD
+  EWALLET
+  CRYPTO_WALLET
+  INVESTMENT
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+  TRANSFER
+  INVESTMENT
+  LOAN
+  DEBT
+  SAVING
+}
+
+enum TransactionSource {
+  MANUAL
+  NLP
+  OCR_SLIP
+  OCR_RECEIPT
+  RECURRING
+  API
+  IMPORT
+}
+
+enum CategoryKind {
+  INCOME
+  EXPENSE
+  BOTH
+}
+
+enum BudgetPeriod {
+  DAILY
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  YEARLY
+}
+
+enum GoalStatus {
+  ACTIVE
+  ACHIEVED
+  ARCHIVED
+}
+
+enum InvestmentType {
+  STOCK
+  ETF
+  MUTUAL_FUND
+  CRYPTO
+  GOLD
+  OTHER
+}
+
+enum TradeSide {
+  BUY
+  SELL
+}
+
+enum AssetType {
+  PROPERTY
+  VEHICLE
+  ELECTRONICS
+  GOLD
+  JEWELRY
+  CASH
+  OTHER
+}
+
+enum RecurrenceFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  YEARLY
+}
+
+enum ReminderType {
+  DAILY_LOG
+  CREDIT_CARD_DUE
+  INSURANCE
+  LOAN
+  RENT
+  CUSTOM
+}
+
+enum NotificationChannel {
+  LINE_PUSH
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum OcrStatus {
+  PENDING
+  PROCESSED
+  NEEDS_REVIEW
+  FAILED
+}
+
+enum AttachmentKind {
+  SLIP
+  RECEIPT
+  IMAGE
+  FILE
+}
+
+enum AiRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+// ─────────────────────────── Core ───────────────────────────
+
+model User {
+  id          String   @id @default(cuid())
+  lineUserId  String   @unique
+  displayName String
+  pictureUrl  String?
+  timezone    String   @default("Asia/Bangkok")
+  language    String   @default("th")
+  // per-user human-friendly transaction counter (users say "ลบ #52")
+  nextTxnRef  Int      @default(1)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  accounts       Account[]
+  transactions   Transaction[]
+  categories     Category[]
+  budgets        Budget[]
+  goals          Goal[]
+  investments    Investment[]
+  assets         Asset[]
+  recurring      RecurringTransaction[]
+  reminders      Reminder[]
+  tags           Tag[]
+  attachments    Attachment[]
+  slips          Slip[]
+  receipts       Receipt[]
+  notifications  Notification[]
+  auditLogs      AuditLog[]
+  aiConversation AIConversation[]
+  corrections    CategoryCorrection[]
+}
+
+model Account {
+  id          String      @id @default(cuid())
+  userId      String
+  name        String
+  type        AccountType
+  // preset key: cash | scb | kbank | ktb | bbl | truemoney | custom
+  provider    String?
+  currency    String      @default("THB")
+  balance     Decimal     @default(0) @db.Decimal(18, 2)
+  creditLimit Decimal?    @db.Decimal(18, 2)
+  isDefault   Boolean     @default(false)
+  isArchived  Boolean     @default(false)
+  sortOrder   Int         @default(0)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions Transaction[] @relation("AccountTxns")
+  transfersIn  Transaction[] @relation("TransferTarget")
+  investments  Investment[]
+
+  @@unique([userId, name])
+  @@index([userId, isArchived])
+}
+
+model Category {
+  id        String       @id @default(cuid())
+  // null = system category shared by all users
+  userId    String?
+  key       String? // stable key for system categories (food, transport, …)
+  name      String
+  nameTh    String
+  icon      String       @default("📦")
+  kind      CategoryKind @default(EXPENSE)
+  parentId  String?
+  isSystem  Boolean      @default(false)
+  createdAt DateTime     @default(now())
+
+  user         User?                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent       Category?            @relation("Subcategories", fields: [parentId], references: [id])
+  children     Category[]           @relation("Subcategories")
+  transactions Transaction[]
+  budgets      Budget[]
+  corrections  CategoryCorrection[]
+
+  @@unique([userId, name])
+  @@index([userId])
+}
+
+model Transaction {
+  id           String            @id @default(cuid())
+  userId       String
+  // per-user friendly ref, allocated from User.nextTxnRef inside the insert txn
+  shortRef     Int
+  accountId    String
+  // set only for TRANSFER
+  toAccountId  String?
+  categoryId   String?
+  type         TransactionType
+  amount       Decimal           @db.Decimal(18, 2)
+  currency     String            @default("THB")
+  // rate to THB when currency ≠ THB
+  exchangeRate Decimal?          @db.Decimal(18, 8)
+  description  String?
+  merchant     String?
+  location     String?
+  source       TransactionSource @default(MANUAL)
+  occurredAt   DateTime
+  deletedAt    DateTime?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account     Account          @relation("AccountTxns", fields: [accountId], references: [id])
+  toAccount   Account?         @relation("TransferTarget", fields: [toAccountId], references: [id])
+  category    Category?        @relation(fields: [categoryId], references: [id])
+  tags        TransactionTag[]
+  attachments Attachment[]
+  slip        Slip?
+  receipt     Receipt?
+  trade       InvestmentTrade?
+
+  @@unique([userId, shortRef])
+  @@index([userId, occurredAt(sort: Desc)])
+  @@index([userId, categoryId, occurredAt])
+  @@index([userId, deletedAt])
+  @@index([accountId])
+}
+
+model Tag {
+  id     String @id @default(cuid())
+  userId String
+  name   String
+
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions TransactionTag[]
+
+  @@unique([userId, name])
+}
+
+model TransactionTag {
+  transactionId String
+  tagId         String
+
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  tag         Tag         @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([transactionId, tagId])
+}
+
+// AI learning: the user's own corrections beat rules and the model, forever.
+model CategoryCorrection {
+  id         String   @id @default(cuid())
+  userId     String
+  // normalized keyword/merchant, e.g. "กาแฟ amazon" → cafe category
+  keyword    String
+  categoryId String
+  hitCount   Int      @default(1)
+  lastUsedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, keyword])
+}
+
+// ─────────────────────────── Planning ───────────────────────────
+
+model Budget {
+  id          String       @id @default(cuid())
+  userId      String
+  // null = overall budget
+  categoryId  String?
+  period      BudgetPeriod @default(MONTHLY)
+  amount      Decimal      @db.Decimal(18, 2)
+  alertLevels Int[]        @default([50, 80, 100])
+  isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category Category? @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, categoryId, period])
+}
+
+model Goal {
+  id            String     @id @default(cuid())
+  userId        String
+  name          String
+  targetAmount  Decimal    @db.Decimal(18, 2)
+  currentAmount Decimal    @default(0) @db.Decimal(18, 2)
+  targetDate    DateTime?
+  status        GoalStatus @default(ACTIVE)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+}
+
+// ─────────────────────────── Wealth ───────────────────────────
+
+model Investment {
+  id        String         @id @default(cuid())
+  userId    String
+  accountId String?
+  type      InvestmentType
+  symbol    String
+  name      String?
+  // crypto needs high precision
+  quantity  Decimal        @default(0) @db.Decimal(28, 10)
+  avgCost   Decimal        @default(0) @db.Decimal(18, 4)
+  currency  String         @default("THB")
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  user    User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account Account?          @relation(fields: [accountId], references: [id])
+  trades  InvestmentTrade[]
+
+  @@unique([userId, symbol, type])
+}
+
+model InvestmentTrade {
+  id            String    @id @default(cuid())
+  investmentId  String
+  // the money-side transaction (INVESTMENT type) this trade created
+  transactionId String?   @unique
+  side          TradeSide
+  quantity      Decimal   @db.Decimal(28, 10)
+  price         Decimal   @db.Decimal(18, 4)
+  fee           Decimal   @default(0) @db.Decimal(18, 2)
+  tradedAt      DateTime
+  createdAt     DateTime  @default(now())
+
+  investment  Investment   @relation(fields: [investmentId], references: [id], onDelete: Cascade)
+  transaction Transaction? @relation(fields: [transactionId], references: [id])
+
+  @@index([investmentId, tradedAt])
+}
+
+model Asset {
+  id            String    @id @default(cuid())
+  userId        String
+  name          String
+  type          AssetType
+  purchasePrice Decimal?  @db.Decimal(18, 2)
+  currentValue  Decimal   @db.Decimal(18, 2)
+  purchasedAt   DateTime?
+  notes         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ─────────────────────────── Automation ───────────────────────────
+
+model RecurringTransaction {
+  id          String              @id @default(cuid())
+  userId      String
+  accountId   String
+  categoryId  String?
+  type        TransactionType
+  amount      Decimal             @db.Decimal(18, 2)
+  description String
+  frequency   RecurrenceFrequency
+  // MONTHLY: 1–31 (clamped to month length); WEEKLY: 0–6
+  dayOfMonth  Int?
+  dayOfWeek   Int?
+  nextRunAt   DateTime
+  lastRunAt   DateTime?
+  endsAt      DateTime?
+  isActive    Boolean             @default(true)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([isActive, nextRunAt])
+}
+
+model Reminder {
+  id            String              @id @default(cuid())
+  userId        String
+  type          ReminderType        @default(CUSTOM)
+  message       String
+  // "HH:mm" in the user's timezone
+  timeOfDay     String
+  frequency     RecurrenceFrequency @default(DAILY)
+  dayOfMonth    Int?
+  nextTriggerAt DateTime
+  isActive      Boolean             @default(true)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([isActive, nextTriggerAt])
+}
+
+// ─────────────────────────── Evidence (OCR) ───────────────────────────
+
+model Attachment {
+  id            String         @id @default(cuid())
+  userId        String
+  transactionId String?
+  kind          AttachmentKind
+  storageKey    String
+  mimeType      String
+  sizeBytes     Int
+  createdAt     DateTime       @default(now())
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transaction Transaction? @relation(fields: [transactionId], references: [id])
+  slip        Slip?
+  receipt     Receipt?
+
+  @@index([userId])
+  @@index([transactionId])
+}
+
+model Slip {
+  id              String    @id @default(cuid())
+  userId          String
+  attachmentId    String    @unique
+  transactionId   String?   @unique
+  bank            String?
+  amount          Decimal?  @db.Decimal(18, 2)
+  transRef        String?
+  senderName      String?
+  senderAccount   String?
+  receiverName    String?
+  receiverAccount String?
+  transDate       DateTime?
+  qrPayload       String?
+  rawOcrText      String?
+  confidence      Float?
+  status          OcrStatus @default(PENDING)
+  createdAt       DateTime  @default(now())
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  attachment  Attachment   @relation(fields: [attachmentId], references: [id], onDelete: Cascade)
+  transaction Transaction? @relation(fields: [transactionId], references: [id])
+
+  @@index([userId, createdAt])
+  // duplicate-slip detection
+  @@index([transRef])
+}
+
+model Receipt {
+  id            String    @id @default(cuid())
+  userId        String
+  attachmentId  String    @unique
+  transactionId String?   @unique
+  storeName     String?
+  taxId         String?
+  subtotal      Decimal?  @db.Decimal(18, 2)
+  vat           Decimal?  @db.Decimal(18, 2)
+  total         Decimal?  @db.Decimal(18, 2)
+  purchasedAt   DateTime?
+  rawOcrText    String?
+  confidence    Float?
+  status        OcrStatus @default(PENDING)
+  createdAt     DateTime  @default(now())
+
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  attachment  Attachment    @relation(fields: [attachmentId], references: [id], onDelete: Cascade)
+  transaction Transaction?  @relation(fields: [transactionId], references: [id])
+  items       ReceiptItem[]
+
+  @@index([userId, createdAt])
+}
+
+model ReceiptItem {
+  id        String  @id @default(cuid())
+  receiptId String
+  name      String
+  quantity  Decimal @default(1) @db.Decimal(12, 3)
+  unitPrice Decimal @db.Decimal(18, 2)
+  amount    Decimal @db.Decimal(18, 2)
+
+  receipt Receipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+}
+
+// ─────────────────────────── System ───────────────────────────
+
+model Notification {
+  id        String              @id @default(cuid())
+  userId    String
+  channel   NotificationChannel @default(LINE_PUSH)
+  title     String?
+  body      String
+  status    NotificationStatus  @default(PENDING)
+  meta      Json?
+  sentAt    DateTime?
+  createdAt DateTime            @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([status])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String // e.g. "transaction.create"
+  entity    String // e.g. "Transaction"
+  entityId  String
+  before    Json?
+  after     Json?
+  ip        String?
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([entity, entityId])
+  @@index([userId, createdAt])
+}
+
+model AIConversation {
+  id        String   @id @default(cuid())
+  userId    String
+  role      AiRole
+  content   String
+  // resolved intent kind, for behavior analytics
+  intent    String?
+  model     String?
+  tokensIn  Int?
+  tokensOut Int?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+}
+
+// hard dedupe guarantee behind the fast Redis check
+model WebhookEvent {
+  id          String    @id @default(cuid())
+  eventId     String    @unique
+  receivedAt  DateTime  @default(now())
+  processedAt DateTime?
+}

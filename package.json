@@ -1,0 +1,25 @@
+{
+  "name": "finance-butler",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Finance Butler AI — AI personal finance assistant on LINE (Thai)",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "dev": "npm run dev -w apps/backend",
+    "dev:dashboard": "npm run dev -w apps/dashboard",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "format": "prettier --write \"**/*.{ts,tsx,md,json}\""
+  },
+  "devDependencies": {
+    "prettier": "^3.3.3"
+  }
+}
