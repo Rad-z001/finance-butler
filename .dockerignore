@@ -1,0 +1,11 @@
+node_modules
+**/node_modules
+**/dist
+.devtools
+.git
+.env
+**/.env
+docs
+tasks
+*.md
+docker-compose*.yml

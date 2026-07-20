@@ -21,7 +21,12 @@ const schema = z.object({
     .transform((s) => s.split(",").map((o) => o.trim())),
 
   DATABASE_URL: z.string().url(),
-  REDIS_URL: z.string().url(),
+  // optional: without it the API runs single-process (inline event handling,
+  // no queue/worker) — the mode used on free hosts like Render
+  REDIS_URL: z
+    .union([z.string().url(), z.literal("")])
+    .optional()
+    .transform((v) => (v ? v : undefined)),
 
   LINE_CHANNEL_ACCESS_TOKEN: z.string().min(1),
   LINE_CHANNEL_SECRET: z.string().min(1),

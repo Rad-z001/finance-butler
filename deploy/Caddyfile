@@ -1,0 +1,4 @@
+# Automatic HTTPS for the bot. DOMAIN comes from .env.prod (e.g. yourbot.duckdns.org).
+{$DOMAIN} {
+	reverse_proxy api:3000
+}

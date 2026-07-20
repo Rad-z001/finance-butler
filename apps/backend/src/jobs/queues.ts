@@ -5,6 +5,9 @@ import { env } from "../config/env.js";
 
 /** Shared Redis connection factory (BullMQ requires maxRetriesPerRequest: null). */
 export function createRedis(): Redis {
+  if (!env.REDIS_URL) {
+    throw new Error("REDIS_URL is not set — queue mode requires Redis (see src/server.ts modes)");
+  }
   return new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
 }
 
