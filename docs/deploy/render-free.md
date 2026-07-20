@@ -38,8 +38,8 @@ git push -u origin main
 | Language | Node |
 | Branch | `main` |
 | Root Directory | *(เว้นว่าง)* |
-| **Build Command** | `npm ci --include=dev && npm run build -w packages/shared && npx prisma generate --schema apps/backend/prisma/schema.prisma && npm run build -w apps/backend` |
-| **Start Command** | `npx prisma migrate deploy --schema apps/backend/prisma/schema.prisma && node apps/backend/dist/server.js` |
+| **Build Command** | `npm ci --include=dev && npm run build:render` |
+| **Start Command** | `npm run start:render` |
 | Instance Type | **Free** |
 
 3. **Environment Variables** (กด Add):

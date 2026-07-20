@@ -12,6 +12,8 @@
   },
   "scripts": {
     "build": "npm run build --workspaces --if-present",
+    "build:render": "npm run build -w packages/shared && prisma generate --schema apps/backend/prisma/schema.prisma && npm run build -w apps/backend",
+    "start:render": "prisma migrate deploy --schema apps/backend/prisma/schema.prisma && node apps/backend/dist/server.js",
     "dev": "npm run dev -w apps/backend",
     "dev:infra": "node scripts/dev-infra.mjs",
     "dev:dashboard": "npm run dev -w apps/dashboard",
