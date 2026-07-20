@@ -20,10 +20,12 @@ import type { ILineMessenger, LineMessage } from "../../line/client.js";
  */
 
 const user: User = {
-  id: "u1", lineUserId: "U123", displayName: "Test", pictureUrl: null,
+  id: "u1", lineUserId: "U123", displayName: "Test", pictureUrl: null, isGroup: false,
   timezone: "Asia/Bangkok", language: "th", nextTxnRef: 2, isActive: true,
   createdAt: new Date(), updatedAt: new Date(),
 };
+
+const groupLedger: User = { ...user, id: "g1", lineUserId: "C999", displayName: "คู่เรา", isGroup: true };
 
 const fakeTxn = {
   id: "t1", shortRef: 1, type: "EXPENSE", amount: new Prisma.Decimal("80"),
@@ -44,6 +46,7 @@ function buildPipeline() {
 
   const users = {
     findOrCreateByLineId: vi.fn(async () => user),
+    findOrCreateGroupLedger: vi.fn(async () => groupLedger),
     defaultAccount: vi.fn(async () => ({ id: "a1", name: "เงินสด" })),
     setActive: vi.fn(async () => undefined),
     findAccountByHint: vi.fn(async () => null),
@@ -71,6 +74,8 @@ function buildPipeline() {
     reply: vi.fn(async (_t, messages) => void replies.push(messages)),
     push: vi.fn(async () => undefined),
     getProfile: vi.fn(async () => ({ displayName: "Test" })),
+    getGroupName: vi.fn(async () => "คู่เรา"),
+    getMemberName: vi.fn(async () => "แฟน"),
   };
 
   const msg = new CoreMessageBuilder();
@@ -112,5 +117,31 @@ describe("pipeline smoke: กินข้าว 80", () => {
     await pipeline.process(textEvent("ควรจัดการเงินยังไงดี"));
     expect(ai.parseIntent).toHaveBeenCalledOnce();
     expect(replies[0]?.[0]?.type).toBe("text"); // cannot_parse fallback from fake ai
+  });
+});
+
+describe("group-ledger mode", () => {
+  function groupTextEvent(text: string): WebhookEvent {
+    const e = textEvent(text) as MessageEvent;
+    return {
+      ...e,
+      source: { type: "group", groupId: "C999", userId: "U123" },
+    } as WebhookEvent;
+  }
+
+  it("records into the shared ledger with the payer's name", async () => {
+    const { pipeline, created, replies } = buildPipeline();
+    await pipeline.process(groupTextEvent("ค่าข้าวเย็น 450"));
+    expect(created).toHaveLength(1);
+    expect(created[0]).toMatchObject({ amount: "450", actorName: "แฟน", actorLineUserId: "U123" });
+    expect(replies).toHaveLength(1);
+  });
+
+  it("stays SILENT on normal group chatter (no AI, no error spam)", async () => {
+    const { pipeline, ai, replies, created } = buildPipeline();
+    await pipeline.process(groupTextEvent("คืนนี้กินอะไรดี"));
+    expect(created).toHaveLength(0);
+    expect(ai.parseIntent).not.toHaveBeenCalled();
+    expect(replies).toHaveLength(0);
   });
 });

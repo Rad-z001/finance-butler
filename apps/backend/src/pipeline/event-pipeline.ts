@@ -32,23 +32,41 @@ export class EventPipeline {
   async process(event: WebhookEvent): Promise<void> {
     if (!(await this.claimEvent(event))) return;
 
+    // bot invited into a group/room → create the shared ledger, greet
+    if (event.type === "join") {
+      const groupId = this.groupIdOf(event);
+      if (groupId) {
+        const name = await this.line.getGroupName(groupId);
+        const ledger = await this.users.findOrCreateGroupLedger(groupId, name);
+        await this.line.reply(event.replyToken, this.msg.welcomeGroup(ledger.displayName));
+      }
+      return;
+    }
+    if (event.type === "leave") {
+      const groupId = this.groupIdOf(event);
+      if (groupId) await this.users.setActive(groupId, false);
+      return;
+    }
+
     const lineUserId = event.source.type === "user" ? event.source.userId : undefined;
-    if (!lineUserId) return; // group/room support is out of scope for M1
+    const groupId = this.groupIdOf(event);
+    if (!lineUserId && !groupId) return;
 
     switch (event.type) {
       case "follow": {
+        if (!lineUserId) return;
         const user = await this.users.findOrCreateByLineId(lineUserId);
         await this.users.setActive(lineUserId, true);
         await this.line.push(lineUserId, this.msg.welcome(user.displayName));
         return;
       }
       case "unfollow":
-        await this.users.setActive(lineUserId, false);
+        if (lineUserId) await this.users.setActive(lineUserId, false);
         return;
       case "message": {
-        const user = await this.users.findOrCreateByLineId(lineUserId);
+        const { user, actorName, actorLineUserId } = await this.resolveLedger(event);
         if (event.message.type === "text") {
-          await this.handleText(user, event.message.text, event.replyToken);
+          await this.handleText(user, event.message.text, event.replyToken, actorName, actorLineUserId);
         } else if (event.message.type === "image") {
           // M3 (TASK-03) plugs the OCR pipeline in here
           await this.line.reply(event.replyToken, [
@@ -58,7 +76,7 @@ export class EventPipeline {
         return;
       }
       case "postback": {
-        const user = await this.users.findOrCreateByLineId(lineUserId);
+        const { user } = await this.resolveLedger(event);
         const messages = await this.dispatcher.dispatchPostback(user, event.postback.data);
         await this.line.reply(event.replyToken, messages);
         return;
@@ -68,16 +86,61 @@ export class EventPipeline {
     }
   }
 
-  private async handleText(user: User, text: string, replyToken: string): Promise<void> {
+  private groupIdOf(event: WebhookEvent): string | undefined {
+    if (event.source.type === "group") return event.source.groupId;
+    if (event.source.type === "room") return event.source.roomId;
+    return undefined;
+  }
+
+  /**
+   * Personal chat → the sender's own ledger.
+   * Group/room chat → the group's shared ledger + who is talking (the payer).
+   */
+  private async resolveLedger(
+    event: WebhookEvent,
+  ): Promise<{ user: User; actorName?: string; actorLineUserId?: string }> {
+    const groupId = this.groupIdOf(event);
+    if (!groupId) {
+      const lineUserId = event.source.type === "user" ? event.source.userId : "";
+      return { user: await this.users.findOrCreateByLineId(lineUserId) };
+    }
+    const name = await this.line.getGroupName(groupId);
+    const user = await this.users.findOrCreateGroupLedger(groupId, name);
+    const memberId = "userId" in event.source ? event.source.userId : undefined;
+    const actorName = memberId ? await this.line.getMemberName(groupId, memberId) : undefined;
+    return {
+      user,
+      ...(actorName ? { actorName } : {}),
+      ...(memberId ? { actorLineUserId: memberId } : {}),
+    };
+  }
+
+  private async handleText(
+    user: User,
+    text: string,
+    replyToken: string,
+    actorName?: string,
+    actorLineUserId?: string,
+  ): Promise<void> {
     const started = Date.now();
     let intent = this.parser.parse(text, user.timezone);
 
     if (intent.kind === "unknown") {
+      // in group chats people talk to each other constantly — never let chatter
+      // hit the AI or produce "I don't understand" spam; only clear commands count
+      if (user.isGroup) return;
       const today = dayjs().tz(user.timezone).format("YYYY-MM-DD");
       intent = await this.ai.parseIntent(text, today);
+      if (intent.kind === "unknown") {
+        await this.line.reply(replyToken, this.msg.error("cannot_parse"));
+        return;
+      }
     }
 
-    const messages = await this.dispatcher.dispatch(user, intent);
+    const messages = await this.dispatcher.dispatch(user, intent, {
+      ...(actorName ? { actorName } : {}),
+      ...(actorLineUserId ? { actorLineUserId } : {}),
+    });
     await this.line.reply(replyToken, messages);
 
     // conversation memory + parse-quality metrics
@@ -87,7 +150,11 @@ export class EventPipeline {
       })
       .catch((err) => logger.warn({ err }, "aiConversation log failed"));
     logger.info(
-      { intent: intent.kind, ms: Date.now() - started, ai: intent.kind !== "unknown" && "parsedBy" in intent ? intent.parsedBy : undefined },
+      {
+        intent: intent.kind,
+        ms: Date.now() - started,
+        parsedBy: "parsedBy" in intent ? intent.parsedBy : undefined,
+      },
       "text handled",
     );
   }

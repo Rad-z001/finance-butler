@@ -22,6 +22,9 @@ export interface CreateTxnInput {
   occurredAtLocal: string;
   tz: string;
   source: "NLP" | "MANUAL" | "OCR_SLIP" | "OCR_RECEIPT" | "RECURRING" | "API";
+  /** group-ledger mode: which member recorded/paid this */
+  actorLineUserId?: string;
+  actorName?: string;
 }
 
 export type TxnWithRelations = Prisma.TransactionGetPayload<{
@@ -61,6 +64,8 @@ export class TransactionService {
           amount,
           description: input.description,
           ...(input.merchant ? { merchant: input.merchant } : {}),
+          ...(input.actorLineUserId ? { actorLineUserId: input.actorLineUserId } : {}),
+          ...(input.actorName ? { actorName: input.actorName } : {}),
           source: input.source,
           occurredAt: localDateToInstant(input.occurredAtLocal, input.tz),
         },
@@ -267,6 +272,7 @@ export class TransactionService {
       categoryIcon: txn.category?.icon ?? "📦",
       accountName: txn.account.name,
       occurredAt: dayjs(txn.occurredAt).tz(tz).format("D MMM"),
+      ...(txn.actorName ? { actorName: txn.actorName } : {}),
     };
   }
 }

@@ -22,7 +22,7 @@ export class StatsService {
       occurredAt: { gte: range.from, lte: range.to },
     };
 
-    const [income, expense, prevExpense, count, byCategory, accounts] = await Promise.all([
+    const [income, expense, prevExpense, count, byCategory, byPayer, accounts] = await Promise.all([
       this.prisma.transaction.aggregate({
         where: { ...base, type: "INCOME" },
         _sum: { amount: true },
@@ -47,6 +47,14 @@ export class StatsService {
         _sum: { amount: true },
         orderBy: { _sum: { amount: "desc" } },
         take: 5,
+      }),
+      // group-ledger mode: outflow per member (actorName null on personal ledgers)
+      this.prisma.transaction.groupBy({
+        by: ["actorName"],
+        where: { ...base, type: { in: [...OUTFLOW_TYPES] }, actorName: { not: null } },
+        _sum: { amount: true },
+        orderBy: { _sum: { amount: "desc" } },
+        take: 6,
       }),
       this.prisma.account.aggregate({
         where: { userId, isArchived: false, type: { not: "CREDIT_CARD" } },
@@ -84,6 +92,15 @@ export class StatsService {
         return {
           name: cat?.nameTh ?? "อื่นๆ",
           icon: cat?.icon ?? "📦",
+          amount: formatAmount(amt),
+          pct: Math.round(amt.div(expenseTotal).mul(100).toNumber()),
+        };
+      }),
+      payerBreakdown: byPayer.map((row) => {
+        const amt = row._sum.amount ?? zero;
+        return {
+          name: row.actorName ?? "ไม่ระบุ",
+          icon: "👤",
           amount: formatAmount(amt),
           pct: Math.round(amt.div(expenseTotal).mul(100).toNumber()),
         };

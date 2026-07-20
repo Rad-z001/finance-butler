@@ -135,7 +135,9 @@ enum AiRole {
 
 model User {
   id          String   @id @default(cuid())
+  // "U…" = personal ledger; "C…"/"R…" (LINE group/room id) = shared group ledger
   lineUserId  String   @unique
+  isGroup     Boolean  @default(false)
   displayName String
   pictureUrl  String?
   timezone    String   @default("Asia/Bangkok")
@@ -231,6 +233,9 @@ model Transaction {
   description  String?
   merchant     String?
   location     String?
+  // group-ledger mode: which member of the group recorded/paid this
+  actorLineUserId String?
+  actorName       String?
   source       TransactionSource @default(MANUAL)
   occurredAt   DateTime
   deletedAt    DateTime?

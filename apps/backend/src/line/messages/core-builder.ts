@@ -76,6 +76,19 @@ export class CoreMessageBuilder implements IMessageBuilder {
     ];
   }
 
+  welcomeGroup(groupName: string): LineMessage[] {
+    return [
+      text(
+        `สวัสดีทุกคนในกลุ่ม "${groupName}" 💑\n` +
+          `ผม Finance Butler — จากนี้กลุ่มนี้มี "กระเป๋ากลาง" ร่วมกันแล้ว\n\n` +
+          `ใครจ่ายอะไร พิมพ์ในกลุ่มได้เลย เช่น\n• ค่าข้าวเย็น 450\n• ค่าน้ำมัน 800\n\n` +
+          `ผมจะจดให้พร้อมชื่อคนจ่าย 📝\nดูสรุป: พิมพ์ "สรุปเดือนนี้" — มียอดแยกรายคนให้ด้วย\n\n` +
+          `(สมุดส่วนตัวของแต่ละคนยังอยู่ในแชทเดี่ยวกับผมเหมือนเดิม ไม่ปนกัน)`,
+        [msg("สรุปเดือนนี้"), msg("ช่วยเหลือ")],
+      ),
+    ];
+  }
+
   txnSaved(txn: TxnView, accountBalance: string): LineMessage[] {
     const isIncome = txn.type === "INCOME";
     const m = bubble(
@@ -84,6 +97,7 @@ export class CoreMessageBuilder implements IMessageBuilder {
       [
         kv(`${txn.categoryIcon} ${txn.categoryName}`, `${isIncome ? "+" : "−"}${txn.amount}฿`, isIncome ? GREEN : RED),
         kv("รายการ", txn.description || "-"),
+        ...(txn.actorName ? [kv("จ่ายโดย", `👤 ${txn.actorName}`)] : []),
         kv("วันที่", txn.occurredAt),
         kv(`ยอด ${txn.accountName}`, `${accountBalance}฿`),
       ],
@@ -130,6 +144,13 @@ export class CoreMessageBuilder implements IMessageBuilder {
       body.push({ type: "text", text: "หมวดใช้จ่ายสูงสุด", size: "xs", color: GRAY, margin: "sm" });
       for (const c of s.topCategories) {
         body.push(kv(`${c.icon} ${c.name}`, `${c.amount}฿ (${c.pct}%)`));
+      }
+    }
+    if (s.payerBreakdown.length > 0) {
+      body.push({ type: "separator", margin: "sm" });
+      body.push({ type: "text", text: "ใครจ่ายบ้าง", size: "xs", color: GRAY, margin: "sm" });
+      for (const payer of s.payerBreakdown) {
+        body.push(kv(`${payer.icon} ${payer.name}`, `${payer.amount}฿ (${payer.pct}%)`));
       }
     }
     const m = bubble(

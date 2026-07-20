@@ -12,6 +12,8 @@ export interface TxnView {
   accountName: string;
   /** ISO date */
   occurredAt: string;
+  /** group-ledger mode: who recorded/paid this */
+  actorName?: string;
 }
 
 export interface CategoryRankView {
@@ -38,6 +40,8 @@ export interface StatsView {
   /** expense change vs the previous period in %; null when previous is 0 */
   expenseChangePct: number | null;
   topCategories: CategoryRankView[];
+  /** group-ledger mode: outflow per member; empty for personal ledgers */
+  payerBreakdown: CategoryRankView[];
 }
 
 export interface CategoryView {

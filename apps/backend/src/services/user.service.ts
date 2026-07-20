@@ -46,6 +46,28 @@ export class UserService {
     await this.prisma.user.updateMany({ where: { lineUserId }, data: { isActive } });
   }
 
+  /**
+   * Group-ledger mode: one shared ledger per LINE group/room, stored as a User
+   * row keyed by the group id ("C…"/"R…" — never collides with "U…" user ids).
+   * All money services work on it unchanged.
+   */
+  async findOrCreateGroupLedger(groupId: string, groupName: string) {
+    const existing = await this.prisma.user.findUnique({ where: { lineUserId: groupId } });
+    if (existing) return existing;
+    const ledger = await this.prisma.user.create({
+      data: {
+        lineUserId: groupId,
+        displayName: groupName,
+        isGroup: true,
+        accounts: {
+          create: { name: "กระเป๋ากลาง", type: "CASH", provider: "cash", isDefault: true },
+        },
+      },
+    });
+    logger.info({ ledgerId: ledger.id }, "created group ledger");
+    return ledger;
+  }
+
   /** Match "SCB" / "เงินสด" / "kbank" to one of the user's accounts. */
   async findAccountByHint(userId: string, hint: string) {
     return this.prisma.account.findFirst({

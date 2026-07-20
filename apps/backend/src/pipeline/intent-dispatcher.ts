@@ -9,6 +9,12 @@ import type { IAiClient } from "../ai/claude.js";
 import { AppError } from "../utils/errors.js";
 import { logger } from "../utils/logger.js";
 
+export interface DispatchCtx {
+  /** group-ledger mode: which member sent the message */
+  actorName?: string;
+  actorLineUserId?: string;
+}
+
 /** Routes a ParsedIntent to the right service and returns the reply messages. */
 export class IntentDispatcher {
   constructor(
@@ -20,7 +26,7 @@ export class IntentDispatcher {
     private readonly msg: IMessageBuilder,
   ) {}
 
-  async dispatch(user: User, intent: ParsedIntent): Promise<LineMessage[]> {
+  async dispatch(user: User, intent: ParsedIntent, ctx: DispatchCtx = {}): Promise<LineMessage[]> {
     try {
       switch (intent.kind) {
         case "add_transaction": {
@@ -39,6 +45,8 @@ export class IntentDispatcher {
             amount: intent.amount,
             description: intent.description,
             ...(intent.merchant ? { merchant: intent.merchant } : {}),
+            ...(ctx.actorName ? { actorName: ctx.actorName } : {}),
+            ...(ctx.actorLineUserId ? { actorLineUserId: ctx.actorLineUserId } : {}),
             occurredAtLocal: intent.occurredAt,
             tz: user.timezone,
             source: "NLP",
