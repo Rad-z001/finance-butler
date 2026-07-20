@@ -44,6 +44,20 @@ export class ThaiRuleParser {
     const stats = this.parseStats(text, tz, nowUtc);
     if (stats) return stats;
 
+    // รายการวันนี้ / ดูรายการเดือนนี้ / รายการ 15 ก.ค. → list transactions
+    const list = text.match(/^(?:ดู)?รายการ\s*(.*)$/u);
+    if (list) {
+      const phrase = (list[1] ?? "").replace(/^ล่าสุด$/u, "").trim() || "วันนี้";
+      const p = resolvePeriod(phrase, tz, nowUtc);
+      if (p) {
+        const range = this.periodRange(p.period, p.anchor, tz);
+        return { kind: "search", query: { from: range.from, to: range.to } };
+      }
+      const d = resolveDate(phrase, tz, nowUtc);
+      if (d) return { kind: "search", query: { from: d.date, to: d.date } };
+      return { kind: "search", query: { text: phrase } };
+    }
+
     // ลบรายการล่าสุด / ลบ #52 / ลบล่าสุด
     const del = text.match(/^ลบ\s*(รายการ)?\s*(ล่าสุด|#?\s*(\d+))?\s*$/u);
     if (del && (del[2] || del[1])) {

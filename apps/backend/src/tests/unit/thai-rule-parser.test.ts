@@ -229,6 +229,21 @@ describe("search", () => {
     }
   });
 
+  it("รายการวันนี้ / ดูรายการเดือนนี้ → list via search", () => {
+    expect(parser.parse("รายการวันนี้", TZ, NOW)).toMatchObject({
+      kind: "search",
+      query: { from: "2026-07-20", to: "2026-07-20" },
+    });
+    expect(parser.parse("ดูรายการเดือนนี้", TZ, NOW)).toMatchObject({
+      kind: "search",
+      query: { from: "2026-07-01", to: "2026-07-31" },
+    });
+    expect(parser.parse("รายการ", TZ, NOW)).toMatchObject({
+      kind: "search",
+      query: { from: "2026-07-20" },
+    });
+  });
+
   it("ค้นหาร้าน Amazon → explicit search", () => {
     const s = parser.parse("ค้นหาร้าน Amazon", TZ, NOW);
     if (s.kind === "search") expect(s.query.text).toBe("Amazon");

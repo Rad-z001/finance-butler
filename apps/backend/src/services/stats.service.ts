@@ -48,10 +48,12 @@ export class StatsService {
         orderBy: { _sum: { amount: "desc" } },
         take: 5,
       }),
-      // group-ledger mode: outflow per member (actorName null on personal ledgers)
+      // group-ledger mode: outflow per member. Grouped by member ID, not name —
+      // profile fetches can fail (members who haven't friended the bot) and the
+      // fallback name would otherwise merge different people into one bar.
       this.prisma.transaction.groupBy({
-        by: ["actorName"],
-        where: { ...base, type: { in: [...OUTFLOW_TYPES] }, actorName: { not: null } },
+        by: ["actorLineUserId"],
+        where: { ...base, type: { in: [...OUTFLOW_TYPES] }, actorLineUserId: { not: null } },
         _sum: { amount: true },
         orderBy: { _sum: { amount: "desc" } },
         take: 6,
@@ -71,6 +73,22 @@ export class StatsService {
     const catIds = byCategory.map((c) => c.categoryId).filter((id): id is string => id !== null);
     const cats = await this.prisma.category.findMany({ where: { id: { in: catIds } } });
     const catMap = new Map(cats.map((c) => [c.id, c]));
+
+    // latest known display name per member id; duplicates get a running number
+    const payerIds = byPayer
+      .map((r) => r.actorLineUserId)
+      .filter((id): id is string => id !== null);
+    const nameRows =
+      payerIds.length > 0
+        ? await this.prisma.transaction.findMany({
+            where: { userId, actorLineUserId: { in: payerIds } },
+            orderBy: { createdAt: "desc" },
+            distinct: ["actorLineUserId"],
+            select: { actorLineUserId: true, actorName: true },
+          })
+        : [];
+    const nameMap = new Map(nameRows.map((r) => [r.actorLineUserId, r.actorName]));
+    const nameUse = new Map<string, number>();
 
     return {
       period,
@@ -98,8 +116,12 @@ export class StatsService {
       }),
       payerBreakdown: byPayer.map((row) => {
         const amt = row._sum.amount ?? zero;
+        let name = (row.actorLineUserId ? nameMap.get(row.actorLineUserId) : null) ?? "สมาชิก";
+        const seen = nameUse.get(name) ?? 0;
+        nameUse.set(name, seen + 1);
+        if (seen > 0) name = `${name} ${seen + 1}`;
         return {
-          name: row.actorName ?? "ไม่ระบุ",
+          name,
           icon: "👤",
           amount: formatAmount(amt),
           pct: Math.round(amt.div(expenseTotal).mul(100).toNumber()),

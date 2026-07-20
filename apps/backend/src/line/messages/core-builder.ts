@@ -266,7 +266,7 @@ export class CoreMessageBuilder implements IMessageBuilder {
     if (items.length === 0) return [text(`ไม่พบรายการ${title ? ` (${title})` : ""} 🔍`)];
     const rows: Flex[] = items.map((t) =>
       kv(
-        `${t.categoryIcon} ${t.occurredAt} ${(t.description || t.categoryName).slice(0, 22)}`,
+        `${t.categoryIcon} ${t.occurredAt} ${(t.description || t.categoryName).slice(0, 20)}${t.actorName ? ` · ${t.actorName.slice(0, 10)}` : ""}`,
         `${t.type === "INCOME" ? "+" : "−"}${t.amount}฿`,
         t.type === "INCOME" ? GREEN : RED,
       ),
