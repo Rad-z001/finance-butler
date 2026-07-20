@@ -18,7 +18,7 @@ export interface DateMatch {
 }
 
 export interface PeriodMatch {
-  period: "day" | "week" | "month" | "year";
+  period: "day" | "week" | "month" | "quarter" | "year";
   /** anchor date YYYY-MM-DD (e.g. last month → 15th of that month) */
   anchor: string;
   matchedText: string;
@@ -114,16 +114,20 @@ export function resolveDate(text: string, tz: string, nowUtc?: Date): DateMatch 
   return null;
 }
 
-/** Period phrases for search/stats: เดือนนี้, เดือนที่แล้ว, ปีนี้, สัปดาห์นี้, last month … */
+/** Period phrases for search/stats: เดือนนี้, เมื่อวาน, ก.ค., ปี 2568, last month … */
 export function resolvePeriod(text: string, tz: string, nowUtc?: Date): PeriodMatch | null {
   const now = nowUtc ? dayjs(nowUtc).tz(tz) : dayjs().tz(tz);
   const table: Array<[RegExp, PeriodMatch["period"], () => Dayjs]> = [
     [/วันนี้|today/iu, "day", () => now],
+    [/เมื่อวานซืน/u, "day", () => now.subtract(2, "day")],
+    [/เมื่อวาน(นี้)?|yesterday/iu, "day", () => now.subtract(1, "day")],
     [/สัปดาห์นี้|อาทิตย์นี้|this week/iu, "week", () => now],
-    [/สัปดาห์(ที่แล้ว|ก่อน)|last week/iu, "week", () => now.subtract(1, "week")],
+    [/สัปดาห์(ที่แล้ว|ก่อน)|อาทิตย์ที่แล้ว|last week/iu, "week", () => now.subtract(1, "week")],
     [/เดือนนี้|this month/iu, "month", () => now],
     [/เดือน(ที่แล้ว|ก่อน)|last month/iu, "month", () => now.subtract(1, "month")],
     [/เดือนหน้า|next month/iu, "month", () => now.add(1, "month")],
+    [/ไตรมาสนี้|this quarter/iu, "quarter", () => now],
+    [/ไตรมาส(ที่แล้ว|ก่อน)|last quarter/iu, "quarter", () => now.subtract(3, "month")],
     [/ปีนี้|this year/iu, "year", () => now],
     [/ปี(ที่แล้ว|ก่อน)|last year/iu, "year", () => now.subtract(1, "year")],
   ];
@@ -131,5 +135,33 @@ export function resolvePeriod(text: string, tz: string, nowUtc?: Date): PeriodMa
     const m = text.match(re);
     if (m?.[0] !== undefined) return { period, anchor: fmt(anchor()), matchedText: m[0] };
   }
+
+  // "ปี 2568" / "ปี 2025" → that year
+  const yearM = text.match(/ปี\s*(\d{4})/u);
+  if (yearM?.[1]) {
+    const y = normalizeYear(Number(yearM[1]), now);
+    return { period: "year", anchor: `${y}-06-15`, matchedText: yearM[0] };
+  }
+
+  // "ก.ค." / "เดือนกรกฎาคม" / "มิ.ย. 2568" → that month (dotted or full names only,
+  // to avoid false hits inside ordinary words)
+  const monthAlt = Object.keys(THAI_MONTHS)
+    .filter((k) => k.includes(".") || k.length >= 6)
+    .sort((a, b) => b.length - a.length)
+    .map((k) => k.replace(/\./g, "\\."))
+    .join("|");
+  const monthM = text.match(new RegExp(`(?:เดือน\\s*)?(${monthAlt})(?:\\s*(\\d{4}))?`, "u"));
+  if (monthM?.[1]) {
+    const month = THAI_MONTHS[monthM[1]];
+    if (month) {
+      const y = monthM[2] ? normalizeYear(Number(monthM[2]), now) : now.year();
+      return {
+        period: "month",
+        anchor: `${y}-${String(month).padStart(2, "0")}-15`,
+        matchedText: monthM[0],
+      };
+    }
+  }
+
   return null;
 }

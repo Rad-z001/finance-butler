@@ -148,6 +148,15 @@ export class IntentDispatcher {
         }
         case "delc":
           return [{ type: "text", text: "ยกเลิกแล้ว 👌" }];
+        case "stats": {
+          const period = p.get("p");
+          const date = p.get("d");
+          const valid = ["day", "week", "month", "quarter", "year"] as const;
+          const kind = valid.find((v) => v === period);
+          if (!kind || !date) return this.msg.error("not_found");
+          const s = await this.stats.summary(user.id, kind, user.timezone, date);
+          return this.msg.statsSummary(s);
+        }
         case "chcat": {
           if (!id) return this.msg.error("not_found");
           const cats = await this.categories.list(user.id);

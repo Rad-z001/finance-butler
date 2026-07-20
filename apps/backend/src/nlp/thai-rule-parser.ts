@@ -30,16 +30,8 @@ export class ThaiRuleParser {
   // ── commands: stats, edit, delete, restore, help ───────────────────────────
 
   private parseCommand(text: string, tz: string, nowUtc?: Date): ParsedIntent | null {
-    const today = (nowUtc ? dayjs(nowUtc).tz(tz) : dayjs().tz(tz)).format("YYYY-MM-DD");
-
-    // สรุปวันนี้ / สรุป / สัปดาห์นี้ / เดือนนี้ / ปีนี้
-    const stats = text.match(/^สรุป\s*(.*)$|^(วันนี้|สัปดาห์นี้|อาทิตย์นี้|เดือนนี้|ปีนี้)$/u);
-    if (stats) {
-      const phrase = (stats[1] ?? stats[2] ?? "วันนี้").trim() || "วันนี้";
-      const p = resolvePeriod(phrase, tz, nowUtc);
-      if (p) return { kind: "stats", period: p.period, date: p.anchor };
-      return { kind: "stats", period: "day", date: today };
-    }
+    const stats = this.parseStats(text, tz, nowUtc);
+    if (stats) return stats;
 
     // ลบรายการล่าสุด / ลบ #52 / ลบล่าสุด
     const del = text.match(/^ลบ\s*(รายการ)?\s*(ล่าสุด|#?\s*(\d+))?\s*$/u);
@@ -84,6 +76,37 @@ export class ThaiRuleParser {
       return { kind: "question", text: "__help__" };
     }
 
+    return null;
+  }
+
+  /**
+   * Summaries for any period:
+   *   สรุป | สรุปวันนี้ | สรุปเมื่อวาน | สรุปสัปดาห์ที่แล้ว | สรุปเดือนที่แล้ว |
+   *   สรุป ก.ค. | สรุป มิ.ย. 2568 | สรุป 15 ก.ค. | สรุปปี 2568 | สรุปปีที่แล้ว
+   * Bare period words work too (เดือนนี้, เมื่อวาน, ก.ค., ไตรมาสนี้ …) as long as
+   * the whole message is just the period phrase.
+   */
+  private parseStats(text: string, tz: string, nowUtc?: Date): ParsedIntent | null {
+    const prefixed = text.match(/^สรุป\s*(.*)$/u);
+    const phrase = prefixed ? (prefixed[1] ?? "").trim() : text;
+
+    if (prefixed && !phrase) {
+      const today = (nowUtc ? dayjs(nowUtc).tz(tz) : dayjs().tz(tz)).format("YYYY-MM-DD");
+      return { kind: "stats", period: "day", date: today };
+    }
+
+    const p = resolvePeriod(phrase, tz, nowUtc);
+    if (p && !phrase.replace(p.matchedText, "").trim()) {
+      return { kind: "stats", period: p.period, date: p.anchor };
+    }
+
+    // "สรุป 15 ก.ค." → day summary of that date (only with the สรุป prefix)
+    if (prefixed) {
+      const d = resolveDate(phrase, tz, nowUtc);
+      if (d && !phrase.replace(d.matchedText, "").trim()) {
+        return { kind: "stats", period: "day", date: d.date };
+      }
+    }
     return null;
   }
 
@@ -150,12 +173,14 @@ export class ThaiRuleParser {
   }
 
   private periodRange(
-    period: "day" | "week" | "month" | "year",
+    period: "day" | "week" | "month" | "quarter" | "year",
     anchor: string,
     tz: string,
   ): { from: string; to: string } {
     const d = dayjs.tz(anchor, tz);
-    const unit = period === "day" ? "day" : period === "week" ? "week" : period === "month" ? "month" : "year";
+    // quarter approximated as month for chat search; stats handles true quarters
+    const unit =
+      period === "day" ? "day" : period === "week" ? "week" : period === "year" ? "year" : "month";
     return { from: d.startOf(unit).format("YYYY-MM-DD"), to: d.endOf(unit).format("YYYY-MM-DD") };
   }
 }

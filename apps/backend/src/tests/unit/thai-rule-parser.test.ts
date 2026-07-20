@@ -84,6 +84,47 @@ describe("commands", () => {
     expect(parser.parse("ปีนี้", TZ, NOW)).toMatchObject({ kind: "stats", period: "year" });
   });
 
+  it("summaries for any period", () => {
+    expect(parser.parse("สรุปเมื่อวาน", TZ, NOW)).toMatchObject({
+      kind: "stats",
+      period: "day",
+      date: "2026-07-19",
+    });
+    expect(parser.parse("เมื่อวาน", TZ, NOW)).toMatchObject({ kind: "stats", period: "day" });
+    expect(parser.parse("สรุปสัปดาห์ที่แล้ว", TZ, NOW)).toMatchObject({ kind: "stats", period: "week" });
+    expect(parser.parse("สรุปเดือนที่แล้ว", TZ, NOW)).toMatchObject({
+      kind: "stats",
+      period: "month",
+      date: "2026-06-20",
+    });
+    expect(parser.parse("สรุปปีที่แล้ว", TZ, NOW)).toMatchObject({ kind: "stats", period: "year" });
+    expect(parser.parse("สรุป มิ.ย.", TZ, NOW)).toMatchObject({
+      kind: "stats",
+      period: "month",
+      date: "2026-06-15",
+    });
+    expect(parser.parse("สรุป มิ.ย. 2568", TZ, NOW)).toMatchObject({
+      kind: "stats",
+      period: "month",
+      date: "2025-06-15",
+    });
+    expect(parser.parse("สรุป 15 ก.ค.", TZ, NOW)).toMatchObject({
+      kind: "stats",
+      period: "day",
+      date: "2026-07-15",
+    });
+    expect(parser.parse("สรุปปี 2568", TZ, NOW)).toMatchObject({
+      kind: "stats",
+      period: "year",
+      date: "2025-06-15",
+    });
+    expect(parser.parse("ไตรมาสนี้", TZ, NOW)).toMatchObject({ kind: "stats", period: "quarter" });
+  });
+
+  it("period words inside longer text still become search, not stats", () => {
+    expect(parser.parse("กาแฟเดือนที่แล้ว", TZ, NOW).kind).toBe("search");
+  });
+
   it("ลบรายการล่าสุด / ลบ #52 → delete", () => {
     expect(parser.parse("ลบรายการล่าสุด", TZ, NOW)).toMatchObject({
       kind: "delete",

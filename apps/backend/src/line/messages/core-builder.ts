@@ -115,6 +115,16 @@ export class CoreMessageBuilder implements IMessageBuilder {
       kv("คงเหลือสุทธิ", `${s.net}฿`),
       kv("เงินในบัญชีรวม", `${s.totalBalance}฿`),
     ];
+    if (s.expenseChangePct !== null) {
+      const up = s.expenseChangePct > 0;
+      body.push(
+        kv(
+          "เทียบช่วงก่อนหน้า",
+          `${up ? "🔺 +" : s.expenseChangePct < 0 ? "🔻 " : ""}${s.expenseChangePct}%`,
+          up ? RED : GREEN,
+        ),
+      );
+    }
     if (s.topCategories.length > 0) {
       body.push({ type: "separator", margin: "sm" });
       body.push({ type: "text", text: "หมวดใช้จ่ายสูงสุด", size: "xs", color: GRAY, margin: "sm" });
@@ -122,8 +132,15 @@ export class CoreMessageBuilder implements IMessageBuilder {
         body.push(kv(`${c.icon} ${c.name}`, `${c.amount}฿ (${c.pct}%)`));
       }
     }
-    const m = bubble(`สรุป${s.periodLabel}`, `📊 สรุป${s.periodLabel} (${s.txnCount} รายการ)`, body) as messagingApi.FlexMessage;
-    m.quickReply = { items: [msg("สรุปวันนี้"), msg("เดือนนี้"), msg("ปีนี้")] };
+    const m = bubble(
+      `สรุป${s.periodLabel}`,
+      `📊 สรุป${s.periodLabel} (${s.txnCount} รายการ)`,
+      body,
+    ) as messagingApi.FlexMessage;
+    const items = [pb("◀ ช่วงก่อนหน้า", `a=stats&p=${s.period}&d=${s.prevAnchor}`)];
+    if (s.nextAnchor) items.push(pb("ช่วงถัดไป ▶", `a=stats&p=${s.period}&d=${s.nextAnchor}`));
+    items.push(msg("สรุปวันนี้"), msg("สัปดาห์นี้"), msg("เดือนนี้"), msg("ปีนี้"));
+    m.quickReply = { items };
     return [m];
   }
 
@@ -201,7 +218,7 @@ export class CoreMessageBuilder implements IMessageBuilder {
       text(
         `🤵 วิธีใช้ Finance Butler\n\n` +
           `บันทึก: "กินข้าว 80", "เงินเดือน 35000", "เมื่อวานกาแฟ 65", "15 ก.ค. ค่าไฟ 900"\n` +
-          `สรุป: "สรุปวันนี้" / "เดือนนี้" / "ปีนี้"\n` +
+          `สรุป: "สรุปวันนี้" / "เมื่อวาน" / "สัปดาห์นี้" / "เดือนที่แล้ว" / "สรุป มิ.ย." / "สรุปปี 2568"\n` +
           `ค้นหา: "กาแฟเดือนนี้", "ค้นหาร้าน Amazon"\n` +
           `แก้ไข: "แก้รายการล่าสุดเป็น 150", "เปลี่ยนหมวดเป็นอาหาร"\n` +
           `ลบ: "ลบรายการล่าสุด", "ลบ #52"\n\n` +

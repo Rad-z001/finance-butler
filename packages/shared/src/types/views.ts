@@ -22,12 +22,21 @@ export interface CategoryRankView {
 }
 
 export interface StatsView {
+  period: "day" | "week" | "month" | "quarter" | "year";
+  /** local YYYY-MM-DD anchoring the summarized period */
+  anchor: string;
+  /** anchor of the previous period (for the ◀ button) */
+  prevAnchor: string;
+  /** anchor of the next period; absent when it lies in the future */
+  nextAnchor?: string;
   periodLabel: string;
   income: string;
   expense: string;
   net: string;
   totalBalance: string;
   txnCount: number;
+  /** expense change vs the previous period in %; null when previous is 0 */
+  expenseChangePct: number | null;
   topCategories: CategoryRankView[];
 }
 
