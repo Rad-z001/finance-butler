@@ -359,6 +359,7 @@ export class CoreMessageBuilder implements IMessageBuilder {
           ],
         },
         txt(`คงเหลือสุทธิ ${s.net}฿`, { color: "#FFFFFF", size: "xl", weight: "bold", margin: "md" }),
+        ...(s.ledgerLabel ? [txt(s.ledgerLabel, { color: "#C9D2E3", size: "xxs", margin: "sm" })] : []),
       ],
       body,
     });

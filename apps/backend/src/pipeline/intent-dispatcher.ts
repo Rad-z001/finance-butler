@@ -88,7 +88,7 @@ export class IntentDispatcher {
 
         case "stats": {
           const s = await this.stats.summary(user.id, intent.period, user.timezone, intent.date);
-          return this.msg.statsSummary(s);
+          return this.msg.statsSummary({ ...s, ledgerLabel: this.ledgerLabel(user) });
         }
 
         case "search": {
@@ -188,6 +188,10 @@ export class IntentDispatcher {
     }
   }
 
+  private ledgerLabel(user: User): string {
+    return user.isGroup ? `💑 กลุ่ม "${user.displayName}"` : "👤 สมุดส่วนตัว";
+  }
+
   /** Postback actions from buttons (a=del|delc|chcat|setcat). */
   async dispatchPostback(user: User, data: string): Promise<LineMessage[]> {
     const p = new URLSearchParams(data);
@@ -230,7 +234,7 @@ export class IntentDispatcher {
           const kind = valid.find((v) => v === period);
           if (!kind || !date) return this.msg.error("not_found");
           const s = await this.stats.summary(user.id, kind, user.timezone, date);
-          return this.msg.statsSummary(s);
+          return this.msg.statsSummary({ ...s, ledgerLabel: this.ledgerLabel(user) });
         }
         case "chcat": {
           if (!id) return this.msg.error("not_found");

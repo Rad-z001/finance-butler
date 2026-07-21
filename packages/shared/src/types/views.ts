@@ -32,6 +32,8 @@ export interface StatsView {
   /** anchor of the next period; absent when it lies in the future */
   nextAnchor?: string;
   periodLabel: string;
+  /** which ledger this summarizes: สมุดส่วนตัว or กลุ่ม "ชื่อกลุ่ม" */
+  ledgerLabel?: string;
   income: string;
   expense: string;
   net: string;
